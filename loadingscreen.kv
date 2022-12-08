@@ -1,0 +1,13 @@
+<loadingscreen>:
+    on_enter: app.start_reconstruction()
+    canvas:
+        Color:
+            rgba: 0.9, 0.9, 0.9, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    Label:
+        text: 'Reconstructing PAT image...'
+        size: self.texture_size
+        color: 0,0,0,1

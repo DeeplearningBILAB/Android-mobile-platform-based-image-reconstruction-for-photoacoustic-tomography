@@ -1,0 +1,35 @@
+<patscreen>:
+    on_leave: app.clear_data()
+    canvas.before:
+        Color:
+            rgba: 1, 1, 1, 1
+        Rectangle:
+            pos: self.pos
+            size: self.size
+
+    image:image
+
+    BoxLayout
+        id: image
+        size_hint_y: 0.9
+        pos_hint:{'top':1}
+    BoxLayout
+        size_hint_y: 0.1
+        size_hint_x: 0.4
+        pos_hint: {'right': 0.7}
+        Button:
+            text:'Save'
+            on_press: app.save_image()
+            on_release: app.change_screen("upload_screen")
+
+
+
+
+
+
+
+
+
+
+
+

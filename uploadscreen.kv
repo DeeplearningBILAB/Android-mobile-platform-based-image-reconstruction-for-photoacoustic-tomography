@@ -1,0 +1,68 @@
+<uploadscreen>
+    canvas:
+        Rectangle:
+            size:self.size
+            pos: self.pos
+    FloatLayout:
+        Button:
+            text: "Upload your .txt file here"
+            size_hint: .8, .1
+            pos_hint: {"top": .9, "right":.9}
+            on_release:
+                root.show_load()
+        TextInput:
+            id: radius_input
+            hint_text:"Input radius here"
+            size_hint: .8, .1
+            pos_hint: {"top": .7, "right":.9}
+            input_filter: 'int'
+            input_type: 'number'
+            multiline: False
+        TextInput:
+            id: anglestep_input
+            hint_text:"Input angle step here"
+            size_hint: .8, .1
+            pos_hint: {"top": .5, "right":.9}
+            input_filter: 'int'
+            input_type: 'number'
+            multiline: False
+        Label:
+            id: submit_message
+            test: "Not all options are filled up."
+            colour: (1,0,0,1)
+            size_hint: .8, .1
+            pos_hint:{"top": .4, "right":.9}
+        Button:
+            text: "[u]Submit[/u]"
+            markup:True
+            size_hint: .8, .1
+            pos_hint: {"top": .2, "right":.9}
+            on_press:
+                app.change_screen("loading_screen")
+
+<LoadDialog>:
+    BoxLayout:
+        size: root.size
+        pos: root.pos
+        orientation: "vertical"
+        FileChooserListView:
+            id: filechooser
+            rootpath:'/storage/emulated/0/'
+
+        BoxLayout:
+            size_hint_y: None
+            height: 30
+            Button:
+                text: "Cancel"
+                on_release: root.cancel()
+
+            Button:
+                text: "Load"
+                on_release:
+                    root.load(filechooser.path, filechooser.selection)
+
+
+
+
+
+

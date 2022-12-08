@@ -1,0 +1,26 @@
+#:include uploadscreen.kv
+#:include loadingscreen.kv
+#:include patscreen.kv
+
+
+GridLayout:
+    cols: 1
+    ScreenManagement:
+        id:screen_manager
+        UploadScreen:
+            name: "upload_screen"
+            id: upload_screen
+        LoadingScreen:
+            name: "loading_screen"
+            id: loading_screen
+        PATScreen:
+            name: "pat_screen"
+            id: pat_screen
+
+
+
+
+
+
+
+
