@@ -7,6 +7,9 @@ from functools import reduce
 from matplotlib.colors import ListedColormap
 from numpy import array, loadtxt, shape, pi, divide, tile, arange, cos, sin, sqrt, rint, logical_and, ones,linspace, convolve, ndarray
 
+import numpy as np
+import math
+
 from kivy.app import App
 from kivy.lang import Builder
 from kivy.uix.screenmanager import Screen, ScreenManager
@@ -27,7 +30,6 @@ if platform == 'android':
     ])
 
 class LoadDialog(FloatLayout):
-    # floatlayout指滑动的时候浮动的部分
     load = ObjectProperty(None)
     cancel = ObjectProperty(None)
 
@@ -54,9 +56,7 @@ class UploadScreen(Screen):
         print(filename)
         if len(filename) > 0:
             with open(os.path.join(path, filename[0])) as f:
-                # 读取全部文件内容f.read(),'w'写入内容
                 print(f.read(), file=open("output.txt", "w"))
-                # 关闭文件
                 f.close()
 
         self.dismiss_popup()
@@ -118,7 +118,7 @@ class MainApp(App):
         forder = 256  # order of the filter
         soundv = 1500  # sound velocity (in m/s)
 
-        pa_data = loadtxt(filename_pa, dtype='float').transpose()  # PA signal (1)
+        pa_data = loadtxt(filename_pa, dtype='double').transpose()  # PA signal
 
         # [Nsample, Nstep] = shape(pa_data)
         #
@@ -145,12 +145,11 @@ class MainApp(App):
 
         print('Please be patient while the PAT/TAT image reconstruction is going on...')
 
-        #delay = tile((delay1 + offset) / (fs * 1e6), (len(radius), 1))
-        delay = (delay1 + offset) / (fs * 1e6)  # (2)
+        delay = tile((delay1 + offset) / (fs * 1e6), (len(radius), 1))
+
         # RECONSTRUCTION #
-        #centerpt = tile(radius, (
-        #    len(offset), 1)).transpose() + offset  # sample point corresponding to the center of circular scan
-        centerpt = radius + offset  # (3)
+        centerpt = tile(radius, (
+            len(offset), 1)).transpose() + offset  # sample point corresponding to the center of circular scan
         R = ndarray.flatten(centerpt / (fs * 1e6) * soundv)
 
         # RECEIVER POSITION #
@@ -159,28 +158,32 @@ class MainApp(App):
                               R])  # vectorized; includes x_receive for all radius
         y_receive = array([sin(arange(0, Nstep) * angle_per_step + angle_step1) * r for r in
                               R])  # vectorized ; includes y_receive for all radius
-        pa_img = np.zeros((250, 250))  # (4)
-        for i in range(0, Nstep):
-            pa_data_tmp = pa_data[:, i]
-            pa_data_tmp = np.r_[pa_data_tmp, np.array([0])]
-            idx = rint(
-                (sqrt((x_img - x_receive[0, i]) ** 2 + (y_img - y_receive[0, i]) ** 2) / soundv - delay) * fs * 1e6)
-            inrange = logical_and(logical_and((idx >= 1), (idx <= Nsample)), logical_and(
-                (sqrt(x_img * x_img + y_img * y_img) < (centerpt / (fs * 10 ** 6) * soundv)),
-                (sqrt((x_img - x_receive[0, i]) ** 2 + (
-                        y_img - y_receive[0, i]) ** 2) > delay * soundv)))
-            idx = inrange * idx + (1 - inrange) * (Nsample + 1)
-            r0 = sqrt(x_receive[0, i] ** 2 + y_receive[0, i] ** 2)
-            dx = x_img - x_receive[0, i]
-            dy = y_img - y_receive[0, i]
+
+        def angle_correction_def(iStep):
+            r0 = sqrt(x_receive[rrr * len(offset) + xxx, iStep] ** 2 + y_receive[rrr * len(
+                offset) + xxx, iStep] ** 2)  # For vectorized variable, use rrrr*len(offset)+xxx to get the variable for rrr
+            dx = x_img - x_receive[rrr * len(offset) + xxx, iStep]
+            dy = y_img - y_receive[rrr * len(offset) + xxx, iStep]
             rr0 = sqrt(dx ** 2 + dy ** 2)
-            angle_correction = (-x_receive[0, i] * dx - y_receive[0, i] * dy) / r0 / (rr0 ** 3) / 4 / pi
-            t = np.zeros((250, 250))
-            for i in range(250):
-                for j, k in enumerate(idx[i, :]):
-                    k = int(k - 1)
-                    t[i, j] = pa_data_tmp[k]
-            pa_img = pa_img + t
+            angle_correction = (-x_receive[rrr * len(offset) + xxx, iStep] * dx - y_receive[
+                rrr * len(offset) + xxx, iStep] * dy) / r0 / (rr0 ** 3) / 4 / pi
+            return angle_correction
+
+        def pa_img_idx(iStep):
+            pa_data_tmp = pa_data[:, iStep]
+            idx = rint(
+                (sqrt((x_img - x_receive[rrr * len(offset) + xxx, iStep]) ** 2 + (
+                        y_img - y_receive[rrr * len(offset) + xxx, iStep]) ** 2) / soundv - delay[
+                     rrr, xxx]) * fs * 1e6)
+            inrange = logical_and(logical_and((idx >= 1), (idx <= Nsample)), logical_and(
+                (sqrt(x_img * x_img + y_img * y_img) < (centerpt[rrr, xxx] / (fs * 10 ** 6) * soundv)),
+                (sqrt((x_img - x_receive[rrr * len(offset) + xxx, iStep]) ** 2 + (
+                        y_img - y_receive[rrr * len(offset) + xxx, iStep]) ** 2) > delay[rrr, xxx] * soundv)))
+            idx = inrange * idx + (1 - inrange) * (Nsample + 1)
+            idx = idx.astype(int)
+            pa_img_idx = [pa_data_tmp.__getitem__(item - 1) for s, item in enumerate(idx)]
+            angle_correction = angle_correction_def(iStep)
+            return pa_img_idx * angle_correction / angle_correction1
 
         # Colourmap Settings
         N = 64
@@ -190,16 +193,48 @@ class MainApp(App):
         vals[:, 2] = linspace(1, 0, N)
         gray2 = ListedColormap(vals)
 
+        iStep = arange(0, Nstep)
+        for rrr in (range(0, len(radius))):
+            for xxx in range(0, len(offset)):
+                # BACKPROJECTION #
+                angle_correction1 = reduce((lambda angle_correction1, n: angle_correction1 + n), map(angle_correction_def, iStep))
+                pa_img = reduce((lambda pa_img, n: pa_img + n),map(pa_img_idx, iStep))
+
+        execution_time = round((time.time() - start_time), 1)
+        
+        Signal = pa_img[75:175, 75:175]
+        Signal = Signal.flatten()
+        Signal.sort()
+        Signal = abs(np.sort(-Signal))
+        reqArr= np.mean(Signal[1:10])
+        noise = pa_img[221:245,221:245]
+        c = noise.flatten()
+        b=np.std(c)
+        snr = reqArr/b
+        snr2 = round(20*math.log10(snr),1)
+        
+        #plt.figure()
+        #im = plt.imshow(pa_img.astype(float),cmap=gray2)
+        #plt.gca()
+        #plt.xticks([])
+        #plt.yticks([])
+        #plt.axis('image')
+        #plt.colorbar(im,fraction=0.046, pad=0.04)
+        #plt.suptitle(radius[rrr], fontsize=20)
+        
+        #plt.figtext(0.5, 0.05, 'Reconstruction time: ' + str(execution_time) + ' s ', ha = 'center', fontsize=20)
+        pamin = pa_img.min()
+        pamax = pa_img.max()
+        PA_img = (pa_img-pamin)/(pamax-pamin)
         plt.figure()
-        im = plt.imshow(pa_img.astype(float),cmap=gray2)
+        im = plt.imshow(PA_img.astype(float), cmap=gray2)
         plt.gca()
         plt.xticks([])
         plt.yticks([])
         plt.axis('image')
-        plt.colorbar(im,fraction=0.046, pad=0.04)
-        plt.suptitle(radius, fontsize=20)
-        execution_time = round((time.time() - start_time), 1)
-        plt.figtext(0.5, 0.05, 'Reconstruction time: ' + str(execution_time) + ' s', ha = 'center', fontsize=20)
+        plt.colorbar(im, fraction=0.046, pad=0.04)
+        plt.suptitle(radius[rrr], fontsize=20)
+        plt.figtext(0.5, 0.05, 'Reconstruction time: ' + str(execution_time) + ' s '+"SNR:"+ str(snr2)+"dB", ha = 'center', fontsize=20)
         reconstructed_image = FigureCanvasKivyAgg(plt.gcf())
         self.image = self.root.ids['pat_screen'].ids['image']
         self.image.add_widget(reconstructed_image)
